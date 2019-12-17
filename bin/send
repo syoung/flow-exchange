@@ -1,0 +1,39 @@
+#!/usr/bin/perl
+
+# Redoing RabbitMQ’s tutorial – part 1
+# get and send
+
+use strict ;
+use warnings ;
+
+use Net::RabbitMQ ;
+
+{
+    # closure to return a new channel ID every time we call nextchan
+    my $nextchan = 1 ;
+    sub nextchan { return $nextchan++ } ;
+}
+
+### BEGIN CONFIGURABLE PARAMETERS ######################################
+my $qserver = q{localhost} ;
+my %qparms = () ;
+
+my $qname   = q{gravity.checks} ;
+my $message = q{Test injection} ;
+### NO CONFIGURABLE PARAMETERS BELOW THIS LINE #########################
+
+
+my $mq      = Net::RabbitMQ->new() ;
+my $chanID  = nextchan() ;
+$message   .= " ".scalar(localtime) ;
+
+print STDERR qq{Will try to send message "$message" through channel $chanID\n} ;
+
+$mq->connect($qserver, \%qparms) ;
+$mq->channel_open($chanID) ;
+$mq->queue_declare($chanID,$qname,,) ;
+$mq->publish($chanID,$qname,$message,{ exchange => "" },) ;
+
+print STDERR qq{Message "$message" sent to queue $qname\n} ;
+
+$mq->disconnect ;

@@ -1,0 +1,66 @@
+#!/usr/bin/perl
+
+# sendtopic
+# Redoing RabbitMQ’s tutorial – part 5
+# focuses on topic routing:
+#  http://www.rabbitmq.com/tutorials/tutorial-five-python.html
+# gettopic and sendtopic
+# Originals: emit_log_topic.pl, receive_log_topic.pl
+
+use strict ;
+use warnings ;
+
+use Net::RabbitMQ ;
+use Data::Dumper ;
+use List::Util qw{shuffle} ;
+
+{
+    # closure to return a new channel ID every time we call nextchan
+    my $nextchan = 1 ;
+    sub nextchan { return $nextchan++ } ;
+}
+
+{
+  # select a random pair facility.level
+  # facility/priority lists is taken from man syslog(3)
+  # OK, OK, this is a bit overkill, I know... blame on my laziness
+  my @facilities = qw{
+		       auth authpriv cron daemon ftp kern local0 local1
+		       local2 local3 local4 local5 local6 local7
+		       lpr mail news syslog user uucp
+		   } ;
+  my @levels = qw{emerg alert crit err warning notice info debug} ;
+  sub random_loglevel {
+    my ($facility) = shuffle @facilities ;
+    my ($level)    = shuffle @levels ;
+    return "$facility.$level" ;
+  }
+}
+
+### BEGIN CONFIGURABLE PARAMETERS ######################################
+my $qserver = q{localhost} ;
+my %qparms  = () ;
+my %eparms  = ( exchange_type => "topic", auto_delete => 1 ) ;
+my $ename   = q{gravity.xchecks} ;
+my $count   = $ARGV[0] ;
+### NO CONFIGURABLE PARAMETERS BELOW THIS LINE #########################
+
+my $mq      = Net::RabbitMQ->new() ;
+my $chanID  = nextchan() ;
+
+$mq->connect($qserver, \%qparms) ;
+$mq->channel_open($chanID) ;
+$mq->exchange_declare($chanID,$ename,\%eparms) ;
+
+for (my $i = 1 ; $i <= $count ; $i++)
+{
+    my $sec      = 1+int(rand(10)) ;
+    my $loglevel = random_loglevel ;
+    my $message  = qq{$loglevel: This task will last for $sec seconds} ;
+
+    $mq->publish($chanID,$loglevel,$message,{ exchange => $ename },) ;
+
+    print STDERR qq{Message "$message" sent to exchange $ename\n} ;
+}
+
+$mq->disconnect ;

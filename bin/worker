@@ -1,0 +1,45 @@
+#!/usr/bin/perl
+
+use strict ;
+use warnings ;
+
+use Net::RabbitMQ ;
+
+{
+    # closure to return a new channel ID every time we call nextchan
+    my $nextchan = 1;
+    sub nextchan { return $nextchan++ } ;
+}
+
+### BEGIN CONFIGURABLE PARAMETERS ######################################
+my $qserver = q{localhost} ;
+my %qparms = () ;
+my %consume_opts = (
+    consumer_tag => "worker_$$",
+    no_ack       => 0,
+    exclusive    => 0
+    ) ;
+my %declare_opts = ( durable => 1, auto_delete => 0 ) ;
+my $qname   = q{gravity.checks} ;
+### NO CONFIGURABLE PARAMETERS BELOW THIS LINE #########################
+my $mq      = Net::RabbitMQ->new() ;
+my $chanID  = nextchan() ;
+
+$mq->connect($qserver, \%qparms) ;
+$mq->channel_open($chanID) ;
+$mq->basic_qos($chanID,{ prefetch_count => 1 }) ;
+$mq->queue_declare($chanID,$qname,\%declare_opts,) ;
+$mq->consume($chanID,$qname,\%consume_opts) ;
+
+# NOTE THAT recv() is BLOCKING!!! get wasn't!
+while ( my $payload = $mq->recv() )
+{
+    last if not defined $payload ;
+    my $body  = $payload->{body} ;
+    my $dtag  = $payload->{delivery_tag} ;
+    my ($sec) = ( $body =~ m{(\d+)} ) ;
+    print STDERR qq{Worker $$: Received from queue $qname: $body\n} ;
+    sleep $sec ;
+    $mq->ack($chanID,$dtag,) ;
+    print STDERR qq{Worker $$: Work done in $sec seconds\n} ;
+}

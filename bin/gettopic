@@ -1,0 +1,76 @@
+#!/usr/bin/perl
+
+# gettopic
+# Redoing RabbitMQ’s tutorial – part 5
+# focuses on topic routing:
+#  http://www.rabbitmq.com/tutorials/tutorial-five-python.html
+# gettopic and sendtopic
+# Originals: emit_log_topic.pl, receive_log_topic.pl
+
+use strict ;
+use warnings ;
+
+use Net::RabbitMQ ;
+
+# TAKES A SINGLE ARGUMENT:
+#  ANY COMBINATION OF A facility AND A level
+#  my @facilities = qw{
+#		       auth authpriv cron daemon ftp kern local0 local1
+#		       local2 local3 local4 local5 local6 local7
+#		       lpr mail news syslog user uucp
+#		   } ;
+#  my @levels = qw{emerg alert crit err warning notice info debug}
+#
+#  E.G:
+# ./gettopic auth.crit
+
+die if not @ARGV > 0 ;
+my ($topic) = @ARGV ;
+
+{
+    # closure to return a new channel ID every time we call nextchan
+    my $nextchan = 1 ;
+    sub nextchan { return $nextchan++ } ;
+}
+
+### BEGIN CONFIGURABLE PARAMETERS ######################################
+my $qserver = q{localhost} ;
+my %qparms = () ;
+my %eparms  = ( exchange_type => "topic", auto_delete => 1 ) ;
+my %consume_opts = (
+		    consumer_tag => "worker_$$",
+		    no_ack       => 0,
+		    exclusive    => 0,
+		   ) ;
+my %declare_opts = ( durable => 1, auto_delete => 1, exclusive => 1 ) ;
+my $qname ;
+my $ename = q{gravity.xchecks} ;
+### NO CONFIGURABLE PARAMETERS BELOW THIS LINE #########################
+
+
+my $mq      = Net::RabbitMQ->new() ;
+my $chanID  = nextchan() ;
+
+$mq->connect($qserver, \%qparms) ;
+$mq->channel_open($chanID) ;
+$mq->exchange_declare($chanID,$ename,\%eparms) ;
+
+$qname = $mq->queue_declare($chanID,"",\%declare_opts,) ;
+
+$mq->queue_bind($chanID, $qname, $ename, $topic,) ;
+print STDERR qq{Bound to queue $qname for topic $topic\n} ;
+
+$mq->consume($chanID,$qname,\%consume_opts) ;
+
+# NOTE THAT recv() is BLOCKING!!! get wasn't!
+while ( my $payload = $mq->recv() )
+{
+    last if not defined $payload ;
+    my $body  = $payload->{body} ;
+    my $dtag  = $payload->{delivery_tag} ;
+    my ($sec) = ( $body =~ m{(\d+)} ) ;
+    print STDERR qq{Worker $$: Received from queue $qname: $body\n} ;
+    sleep $sec ;
+    $mq->ack($chanID,$dtag,) ;
+    print STDERR qq{Worker $$: Work done in $sec secondsn} ;
+}

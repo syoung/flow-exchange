@@ -1,0 +1,84 @@
+#!/usr/bin/perl
+
+# getlog
+# Redoing RabbitMQ’s tutorial – part 4
+# subscribe only to a subset of the messages.
+# emitlog and getlog
+# Original: emit_log_direct.pl, receive_log_direct.pl
+
+BEGIN {
+    my $installdir = $ENV{'installdir'} || "/a";
+    unshift(@INC, "$installdir/extlib/lib/perl5");
+    unshift(@INC, "$installdir/extlib/lib/perl5/x86_64-linux-gnu-thread-multi/");
+    unshift(@INC, "$installdir/lib");
+}
+
+use strict ;
+use warnings ;
+
+use Net::RabbitMQ ;
+
+die if not @ARGV > 0 ;
+my @severities = @ARGV ;
+
+{
+    # closure to return a new channel ID every time we call nextchan
+    my $nextchan = 1 ;
+    sub nextchan { return $nextchan++ } ;
+}
+
+### BEGIN CONFIGURABLE PARAMETERS ######################################
+my $qserver = q{localhost} ;
+#my %qparms = () ;
+my %qparms  = (
+    #port 	=>	5672,
+    user 	    =>	"rabbituser",
+    password 	=>	"runrabit%2",
+    vhost	    =>	"rabbitvhost"
+    #user 	=>	"guest",
+    #password 	=>	"guest",
+    #vhost	=>	"/"
+);
+
+my %eparms  = ( exchange_type => "direct", auto_delete => 1 ) ;
+my %consume_opts = (
+    consumer_tag => "worker_$$",
+    no_ack       => 0,
+    exclusive    => 0,
+) ;
+my %declare_opts = ( durable => 1, auto_delete => 1, exclusive => 1 ) ;
+my $qname ;
+my $ename = q{gravity.xchecks} ;
+### NO CONFIGURABLE PARAMETERS BELOW THIS LINE #########################
+
+
+my $mq      = Net::RabbitMQ->new() ;
+my $chanID  = nextchan() ;
+
+$mq->connect($qserver, \%qparms) ;
+$mq->channel_open($chanID) ;
+$mq->exchange_declare($chanID,$ename, \%eparms) ;
+
+$qname = $mq->queue_declare($chanID,"",\%declare_opts,) ;
+
+foreach my $severity (@severities) {
+  $mq->queue_bind($chanID, $qname, $ename, $severity,) ;
+  print STDERR qq{Bound to queue $qname for severity $severity\n} ;
+}
+
+$mq->consume($chanID,$qname, \%consume_opts) ;
+
+# NOTE THAT recv() is BLOCKING!!! get wasn't!
+while ( my $payload = $mq->recv() )
+{
+    last if not defined $payload ;
+    my $body  = $payload->{body} ;
+    my $dtag  = $payload->{delivery_tag} ;
+    print "body: $body\n";
+    my ($sec) = $body =~ m/(\d+)/;
+    print "sec: $sec\n";
+    print STDERR qq{Worker $$: Received from queue $qname: $body\n} ;
+    sleep $sec ;
+    $mq->ack($chanID,$dtag,) ;
+    print STDERR qq{Worker $$: Work done in $sec seconds\n} ;
+}

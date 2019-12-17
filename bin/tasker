@@ -1,0 +1,41 @@
+#!/usr/bin/perl
+
+# Redoing RabbitMQ’s tutorial – part 2
+# worker and tasker
+
+use strict ;
+use warnings ;
+
+use Net::RabbitMQ ;
+
+{
+    # closure to return a new channel ID every time we call nextchan
+    my $nextchan = 1;
+    sub nextchan { return $nextchan++ } ;
+}
+
+### BEGIN CONFIGURABLE PARAMETERS ######################################
+my $qserver = q{localhost} ;
+my %qparms = () ;
+my %declare_opts = ( durable => 1, auto_delete => 0 ) ;
+my $qname   = q{gravity.checks} ;
+my $count   = $ARGV[0] ;
+### NO CONFIGURABLE PARAMETERS BELOW THIS LINE #########################
+
+my $mq      = Net::RabbitMQ->new() ;
+my $chanID  = nextchan() ;
+$mq->connect($qserver, \%qparms) ;
+$mq->channel_open($chanID) ;
+$mq->queue_declare($chanID,$qname,\%declare_opts,) ;
+
+
+for (my $i = 1 ; $i <= $count ; $i++) {
+    my $sec     = 1+int(rand(10)) ;
+    my $message = qq{This task will last for $sec seconds} ;
+
+    $mq->publish($chanID,$qname,$message,{ exchange => "" },) ;
+
+    print STDERR qq{Message "$message" sent to queue $qname\n} ;
+}
+
+$mq->disconnect ;
