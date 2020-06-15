@@ -1,13 +1,4 @@
-#!/usr/bin/perl -w
-
-BEGIN {
-    my $installdir = $ENV{'installdir'} || "/a";
-    unshift(@INC, "$installdir/extlib/lib/perl5");
-    unshift(@INC, "$installdir/extlib/lib/perl5/x86_64-linux-gnu-thread-multi/");
-    unshift(@INC, "$installdir/lib");
-}
-
-
+#!/usr/bin/env perl
 
 =head2
 
@@ -47,18 +38,12 @@ use Net::RabbitFoot;
 
 #### USE LIBRARY
 use lib "$Bin/../../lib";	
-BEGIN {
-    my $installdir = $ENV{'installdir'} || "/a";
-    unshift(@INC, "$installdir/extlib");
-    unshift(@INC, "$installdir/lib");
-}
-
-my $installdir 	=	 $ENV{'installdir'} || "/a";
 
 #### INTERNAL MODULES
 use Conf::Yaml;
 use Exchange::Main;
 
+my $installdir  =    $ENV{'FLOW_HOME'} || "/a";
 my $configfile	=	"$installdir/conf/config.yml";
 
 my $conf = Conf::Yaml->new(
@@ -67,13 +52,13 @@ my $conf = Conf::Yaml->new(
 );
 
 my $message		=	"";
-my $host		=	$conf->getKey("queue:host", undef) || "localhost";
-my $port		=	$conf->getKey("queue:port", undef) || 5672; 
-my $user		=	$conf->getKey("queue:user", undef) || "guest";
-my $pass		=	$conf->getKey("queue:pass", undef) || "guest";
-my $vhost		=	$conf->getKey("queue:vhost", undef) || "/";
-my $keys		=	$conf->getKey("queue:topickeys", undef) || "test.exchange.topic";
-my $exchange	=	$conf->getKey("queue:topicexchange", undef) || "test.exchange";
+my $host		=	$conf->getKey( "mq:host" ) || "localhost";
+my $port		=	$conf->getKey( "mq:port" ) || 5672; 
+my $user		=	$conf->getKey( "mq:user" ) || "guest";
+my $pass		=	$conf->getKey( "mq:pass" ) || "guest";
+my $vhost		=	$conf->getKey( "mq:vhost" ) || "/";
+my $keys		=	$conf->getKey( "mq:topickeys" ) || "test.exchange.topic";
+my $exchange	=	$conf->getKey( "mq:topicexchange" ) || "test.exchange";
 my $help;
 
 GetOptions (
